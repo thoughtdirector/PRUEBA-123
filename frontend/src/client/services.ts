@@ -1415,3 +1415,19 @@ export class DashboardService {
     });
   }
 }
+
+// Service to register forms
+export class FormsService {
+
+  public static submitForm(data) {
+    return __request(OpenAPI, {
+      method: "POST",
+      url: "/api/v1/forms",
+      body: data,
+      errors: {
+        422: `Validation Error`
+      },
+      useOrg: true
+    });
+  }
+}

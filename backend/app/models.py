@@ -1,7 +1,7 @@
 import uuid
 
 from pydantic import EmailStr
-from sqlmodel import Field, Relationship, SQLModel, JSON, select, Text
+from sqlmodel import Field, Relationship, SQLModel, select, Text
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy.dialects.postgresql import JSONB, BYTEA
@@ -583,3 +583,20 @@ class PlanTokenUse(SQLModel, table=True):
 
 #class MetricsLog(SQLModel, table=True):
  #   metric:str
+
+# Database model to save forms in JSON format
+class Form(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    form_type: str = Field(index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    form_data: str = Field(default="{}") # Stored as string
+    user_id: uuid.UUID = Field(foreign_key="user.id", index=True)
+
+class FormSubmission(SQLModel):
+    form_type: str
+    form_data: Dict[str, Any]
+
+class SuccessResponse(SQLModel):
+    success: bool = True
+    message: str
+    data: Optional[Dict[str, Any]] = None

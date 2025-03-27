@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, Save, FileText, Clipboard, UserPlus, Camera, Users } from 'lucide-react';
-import { ClientService } from '../../client/services';
+import { ClientService, FormsService } from '../../client/services';
 import useAuth from '../../hooks/useAuth';
+import useCustomToast from '../../hooks/useCustomToast';
 
 // Import ShadCN UI components
 import { Card, CardHeader, CardContent, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -19,6 +20,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 const ChildRegister = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const showToast = useCustomToast();
   const [activeTab, setActiveTab] = useState('registerMember');
   
   // Family Member state
@@ -68,9 +70,9 @@ const ChildRegister = () => {
     city: '',
     
     // Authorizations
-    authorize_entry: 'yes',
-    authorize_photos: 'yes',
-    authorize_marketing: 'yes',
+    authorize_entry: true,
+    authorize_photos: true,
+    authorize_marketing: true,
   });
   
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -131,7 +133,7 @@ const ChildRegister = () => {
     const { name, value, type, checked } = e.target;
     setEntryData({
       ...entryData,
-      [name]: type === 'checkbox' ? checked : value,
+      [name]: type === 'checkbox' ? checked : type === "number" ? Number(value): value,
     });
   };
   
@@ -142,6 +144,19 @@ const ChildRegister = () => {
       [name]: value,
     });
   };
+
+  const submitFormMutation = useMutation({
+    mutationFn: FormsService.submitForm,
+    onSuccess: (data) => {
+      // Go back to plans
+      navigate({to: "/dashboard/client/plans"})
+      showToast(
+        "Form submited",
+        "The form has been submited successfully.",
+        "success",
+      )
+    }
+  })
   
   // Handle park entry form submission
   const handleParkEntrySubmit = async (e) => {
@@ -152,10 +167,15 @@ const ChildRegister = () => {
     try {
       // In a real implementation, we would call an API endpoint here
       // For now, we'll just simulate a successful submission
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Mock successful submission
-      alert('Entry form submitted successfully!');
+
+      console.log(entryData);
+
+      const formSubmitData = {
+        "form_type": "park entry forms",
+        "form_data": entryData
+      }
+
+      submitFormMutation.mutate(formSubmitData)
       
       // Reset form
       setEntryData({
@@ -169,13 +189,11 @@ const ChildRegister = () => {
         entry_date: new Date().toISOString().split('T')[0],
         entry_time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         city: '',
-        authorize_entry: 'yes',
-        authorize_photos: 'yes',
-        authorize_marketing: 'yes',
+        authorize_entry: true,
+        authorize_photos: true,
+        authorize_marketing: true,
       });
       
-      // Navigate back to plans
-      navigate({ to: '/dashboard/client/plans' });
     } catch (err) {
       setFormError(err.message || 'An error occurred during submission');
     } finally {
@@ -479,11 +497,11 @@ const ChildRegister = () => {
                         className="flex flex-col space-y-1"
                       >
                         <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="yes" id="authorize-yes" />
+                          <RadioGroupItem value={true} id="authorize-yes" />
                           <Label htmlFor="authorize-yes" className="text-xs">¿Autoriza en calidad de responsable al menor de edad el ingreso al parque?</Label>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="no" id="authorize-no" />
+                          <RadioGroupItem value={false} id="authorize-no" />
                           <Label htmlFor="authorize-no" className="text-xs">No autorizo</Label>
                         </div>
                       </RadioGroup>
@@ -652,11 +670,11 @@ const ChildRegister = () => {
                         className="flex flex-row space-x-4"
                       >
                         <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="yes" id="photos-yes" />
+                          <RadioGroupItem value={true} id="photos-yes" />
                           <Label htmlFor="photos-yes" className="text-xs">Si</Label>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="no" id="photos-no" />
+                          <RadioGroupItem value={false} id="photos-no" />
                           <Label htmlFor="photos-no" className="text-xs">No</Label>
                         </div>
                       </RadioGroup>
@@ -670,11 +688,11 @@ const ChildRegister = () => {
                         className="flex flex-row space-x-4"
                       >
                         <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="yes" id="marketing-yes" />
+                          <RadioGroupItem value={true} id="marketing-yes" />
                           <Label htmlFor="marketing-yes" className="text-xs">Si</Label>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="no" id="marketing-no" />
+                          <RadioGroupItem value={false} id="marketing-no" />
                           <Label htmlFor="marketing-no" className="text-xs">No</Label>
                         </div>
                       </RadioGroup>
