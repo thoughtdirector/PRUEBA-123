@@ -17,7 +17,19 @@ const CustomQRCode: React.FC<CustomQRCodeProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (canvasRef.current) {
+    if (!canvasRef.current) {
+      console.error("Canvas ref no disponible para generar QR");
+      return;
+    }
+
+    if (!value) {
+      console.error("No se puede generar código QR sin un valor");
+      return;
+    }
+
+    console.log("Generando código QR para valor:", value);
+    
+    try {
       QRCode.toCanvas(
         canvasRef.current,
         value,
@@ -31,13 +43,19 @@ const CustomQRCode: React.FC<CustomQRCodeProps> = ({
           }
         },
         (error) => {
-          if (error) console.error("Error generando QR:", error);
+          if (error) {
+            console.error("Error generando QR:", error);
+          } else {
+            console.log("Código QR generado correctamente");
+          }
         }
       );
+    } catch (error) {
+      console.error("Excepción al generar QR:", error);
     }
   }, [value, size]);
 
-  return <canvas id={id} ref={canvasRef} className={className} />;
+  return <canvas id={id} ref={canvasRef} className={className} width={size} height={size} />;
 };
 
 export default CustomQRCode;

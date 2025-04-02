@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import CustomQRCode from './CustomQRCode';
 import Button from './Button';
 
@@ -15,18 +15,33 @@ const QRTicket: React.FC<QRTicketProps> = ({
   parentName,
   onReset
 }) => {
+  // Log para asegurar que recibimos correctamente los datos
+  useEffect(() => {
+    console.log("Rendering QR Ticket con datos:", { primaryKey, childName, parentName });
+  }, [primaryKey, childName, parentName]);
+
   const handleDownloadQR = () => {
+    console.log("Iniciando descarga del código QR");
     const canvas = document.getElementById('qr-code-canvas') as HTMLCanvasElement;
-    if (!canvas) return;
     
-    const dataUrl = canvas.toDataURL('image/png');
-    const link = document.createElement('a');
+    if (!canvas) {
+      console.error("Canvas no encontrado para descargar QR");
+      return;
+    }
     
-    link.href = dataUrl;
-    link.download = `ticket-${childName.replace(/\s+/g, '-')}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const dataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      
+      link.href = dataUrl;
+      link.download = `ticket-${childName.replace(/\s+/g, '-')}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      console.log("QR descargado exitosamente");
+    } catch (error) {
+      console.error("Error al descargar QR:", error);
+    }
   };
 
   return (

@@ -24,10 +24,22 @@ function RouteComponent() {
     setIsLoading(true);
     setError(null);
     
+    console.log("Iniciando registro con datos:", data);
+    
     try {
+      // Validación básica de datos
+      for (const [key, value] of Object.entries(data)) {
+        if (!value || value.trim() === '') {
+          throw new Error(`El campo ${key} no puede estar vacío`);
+        }
+      }
+      
+      console.log("Validación de datos completada, llamando a registerUser");
       const result = await registerUser(data);
+      console.log("Resultado de registerUser:", result);
       
       if (result.success) {
+        console.log("Registro exitoso, actualizando estado con primaryKey:", result.primaryKey);
         setRegistrationData({
           isRegistered: true,
           childName: data.childName,
@@ -35,17 +47,19 @@ function RouteComponent() {
           primaryKey: result.primaryKey
         });
       } else {
+        console.error("Error en el registro:", result.error);
         setError(result.error || 'Error al registrar el niño');
       }
     } catch (error) {
-      console.error("Error al registrar:", error);
-      setError('Ha ocurrido un error al registrar. Por favor, intenta de nuevo.');
+      console.error("Excepción al registrar:", error);
+      setError(error instanceof Error ? error.message : 'Ha ocurrido un error al registrar. Por favor, intenta de nuevo.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleReset = () => {
+    console.log("Reseteando formulario para un nuevo registro");
     setRegistrationData(null);
     setError(null);
   };

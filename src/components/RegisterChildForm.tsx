@@ -51,9 +51,15 @@ const RegisterChildForm: React.FC<Props> = ({ handleSubmit, isLoading = false })
 
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    console.log("Formulario enviado, validando datos:", formData);
     
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      console.error("Validación del formulario fallida");
+      return;
+    }
     
+    // Todos los campos están bien, proceder con el envío
+    console.log("Formulario validado, enviando datos:", formData);
     handleSubmit(e, formData);
   };
 
@@ -164,8 +170,9 @@ const RegisterChildForm: React.FC<Props> = ({ handleSubmit, isLoading = false })
       </div>
       
       <Button
+        type="submit"
         label={isLoading ? "Procesando..." : "Registrar y Generar Ticket de Entrada al Parque"}
-        onClick={() => {}}
+        onClick={() => {}} // El submit se maneja en onSubmit
         disabled={isLoading}
         className="w-full mt-2"
       />

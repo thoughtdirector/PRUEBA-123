@@ -6,7 +6,15 @@ import ChildrenPlayingTable from "../components/Admin/ChildrenPlayingTable";
 import Button from "../components/Button";
 import QRScanner from "../components/QRScanner";
 import Modal from "../components/Modal";
-import { getUserByPrimaryKey, startPlayTime, stopPlayTime, subscribeToActiveSessions } from "../firebase/services";
+import Statistics from "../components/Admin/Statistics";
+import { 
+  getUserByPrimaryKey, 
+  startPlayTime, 
+  stopPlayTime, 
+  subscribeToActiveSessions,
+  getStatistics,
+  ParkStatistics
+} from "../firebase/services";
 
 export const Route = createFileRoute("/admin")({
   component: RouteComponent,
@@ -22,8 +30,15 @@ const ADMIN_CREDENTIALS = {
 function RouteComponent() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
+  const [statisticsOpen, setStatisticsOpen] = useState(false);
   const [childrenPlaying, setChildrenPlaying] = useState<ChildrenPlayingList>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [statistics, setStatistics] = useState<ParkStatistics | null>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [stopTimePreview, setStopTimePreview] = useState<{
+    playedMinutes: number;
+    price: number;
+  } | null>(null);
   const [confirmStopModal, setConfirmStopModal] = useState<{ show: boolean; child: ChildrenPlaying | null }>({
     show: false,
     child: null
@@ -89,11 +104,54 @@ function RouteComponent() {
     }
   };
 
-  const handleStopTime = (child: ChildrenPlaying) => {
-    setConfirmStopModal({
-      show: true,
-      child
-    });
+  const handleStopTime = async (child: ChildrenPlaying) => {
+    // Calcula una estimación del precio antes de mostrar el modal
+    try {
+      if (!child.id) return;
+      
+      // Estimamos el tiempo jugado hasta el momento
+      const startTime = new Date(child.start_time);
+      const now = new Date();
+      const timeDiffMs = now.getTime() - startTime.getTime();
+      const playedMinutes = Math.floor(timeDiffMs / 60000);
+      
+      // Calculamos el precio (mismo algoritmo que en stopPlayTime)
+      let price = 0;
+      const HALF_HOUR_RATE = 30000;
+      const FULL_HOUR_RATE = 50000;
+      
+      if (playedMinutes < 30) {
+        price = Math.ceil((playedMinutes / 30) * HALF_HOUR_RATE);
+      } else if (playedMinutes < 60) {
+        const basePrice = HALF_HOUR_RATE;
+        const additionalMinutes = playedMinutes - 30;
+        const additionalPrice = Math.ceil((additionalMinutes / 30) * (FULL_HOUR_RATE - HALF_HOUR_RATE));
+        price = basePrice + additionalPrice;
+      } else {
+        const completeHours = Math.floor(playedMinutes / 60);
+        const basePrice = completeHours * FULL_HOUR_RATE;
+        const remainingMinutes = playedMinutes % 60;
+        let additionalPrice = 0;
+        if (remainingMinutes > 0) {
+          additionalPrice = Math.ceil((remainingMinutes / 60) * FULL_HOUR_RATE);
+        }
+        price = basePrice + additionalPrice;
+      }
+      
+      setStopTimePreview({ playedMinutes, price });
+      
+      setConfirmStopModal({
+        show: true,
+        child
+      });
+    } catch (error) {
+      console.error("Error al calcular vista previa:", error);
+      // Si hay un error, mostramos el modal sin la vista previa
+      setConfirmStopModal({
+        show: true,
+        child
+      });
+    }
   };
 
   const confirmStopTime = async () => {
@@ -106,7 +164,7 @@ function RouteComponent() {
       const result = await stopPlayTime(confirmStopModal.child.id);
       
       if (result.success) {
-        showNotification(`Tiempo finalizado para ${confirmStopModal.child.child_name}. Tiempo jugado: ${result.playedMinutes} minutos.`);
+        showNotification(`Tiempo finalizado para ${confirmStopModal.child.child_name}. Cobro: $${result.price.toLocaleString()}`);
       } else {
         showNotification(`Error: ${result.error}`, 'error');
       }
@@ -116,17 +174,20 @@ function RouteComponent() {
     } finally {
       setIsLoading(false);
       setConfirmStopModal({ show: false, child: null });
+      setStopTimePreview(null);
     }
   };
 
   useEffect(() => {
     if (!loggedIn) return;
     
+    // Suscripción a las sesiones activas en tiempo real
     const unsubscribe = subscribeToActiveSessions((sessions) => {
       const formattedSessions = sessions.map(session => convertToChildrenPlaying(session));
       setChildrenPlaying(formattedSessions);
     });
     
+    // Limpieza al desmontar
     return () => {
       if (unsubscribe) unsubscribe();
     };
@@ -138,17 +199,27 @@ function RouteComponent() {
     const username = formData.get('username') as string;
     const password = formData.get('password') as string;
     
-    console.log("Credenciales ingresadas:", { username, password });
-    console.log("Credenciales esperadas:", ADMIN_CREDENTIALS);
-    
     if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
-      console.log("Inicio de sesión exitoso");
       setLoggedIn(true);
       localStorage.setItem('admin_logged_in', 'true');
       showNotification("Sesión iniciada correctamente");
     } else {
-      console.log("Credenciales incorrectas");
       showNotification("Credenciales incorrectas. Usa admin/admin123", 'error');
+    }
+  };
+
+  const handleOpenStatistics = async () => {
+    setStatisticsOpen(true);
+    setLoadingStats(true);
+    
+    try {
+      const stats = await getStatistics();
+      setStatistics(stats);
+    } catch (error) {
+      console.error("Error cargando estadísticas:", error);
+      showNotification("Error al cargar estadísticas", "error");
+    } finally {
+      setLoadingStats(false);
     }
   };
 
@@ -218,7 +289,7 @@ function RouteComponent() {
                 />
                 <Button
                   label="Ver estadísticas"
-                  onClick={() => alert("Función no implementada")}
+                  onClick={handleOpenStatistics}
                   className="bg-purple-500 text-white hover:bg-purple-600"
                 />
               </div>
@@ -240,10 +311,33 @@ function RouteComponent() {
             </Modal>
           )}
           
+          {/* Modal de estadísticas */}
+          {statisticsOpen && (
+            <Modal 
+              onClose={() => setStatisticsOpen(false)}
+              title="Estadísticas del Parque"
+            >
+              <div className="w-full max-w-4xl">
+                {statistics ? (
+                  <Statistics statistics={statistics} isLoading={loadingStats} />
+                ) : (
+                  <div className="flex justify-center items-center p-12">
+                    <div className="animate-spin inline-block w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full" role="status">
+                      <span className="sr-only">Cargando...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Modal>
+          )}
+          
           {/* Modal de confirmación para detener tiempo */}
           {confirmStopModal.show && (
             <Modal 
-              onClose={() => setConfirmStopModal({ show: false, child: null })}
+              onClose={() => {
+                setConfirmStopModal({ show: false, child: null });
+                setStopTimePreview(null);
+              }}
               title="Confirmar Finalización de Tiempo"
             >
               <div className="w-full max-w-md p-6">
@@ -251,10 +345,22 @@ function RouteComponent() {
                   ¿Estás seguro que ya le cobraste al usuario por el tiempo de {" "}
                   <span className="font-bold">{confirmStopModal.child?.child_name}</span>?
                 </p>
+                
+                {stopTimePreview && (
+                  <div className="bg-blue-50 p-4 mt-4 mb-4 rounded-md">
+                    <h3 className="font-bold text-lg mb-2">Resumen del cobro:</h3>
+                    <p><span className="font-medium">Tiempo jugado:</span> {stopTimePreview.playedMinutes} minutos</p>
+                    <p className="text-xl font-bold text-blue-700 mt-2">Monto a cobrar: ${stopTimePreview.price.toLocaleString()}</p>
+                  </div>
+                )}
+                
                 <div className="flex justify-end gap-4 mt-6">
                   <Button
                     label="No"
-                    onClick={() => setConfirmStopModal({ show: false, child: null })}
+                    onClick={() => {
+                      setConfirmStopModal({ show: false, child: null });
+                      setStopTimePreview(null);
+                    }}
                     className="bg-gray-200 text-gray-800 hover:bg-gray-300"
                   />
                   <Button
