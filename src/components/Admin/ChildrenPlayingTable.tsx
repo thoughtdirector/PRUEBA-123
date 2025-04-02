@@ -1,7 +1,8 @@
+import React, { useEffect, useState } from "react";
 import {
   ChildrenPlaying,
   ChildrenPlayingList,
-} from "../../types/childrenPlaying";
+} from "../../types";
 
 interface Props {
   childrenPlaying: ChildrenPlayingList;
@@ -9,46 +10,83 @@ interface Props {
 }
 
 const ChildrenPlayingTable = ({ childrenPlaying, onStopTime }: Props) => {
+  const [elapsedTimes, setElapsedTimes] = useState<{ [key: string]: string }>({});
+  
+  // Actualizar el tiempo transcurrido cada segundo
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const updatedTimes: { [key: string]: string } = {};
+      
+      childrenPlaying.forEach(child => {
+        // Solo calcular para sesiones activas
+        if (child.sessionActive !== false) {
+          const startTime = new Date(child.start_time);
+          const now = new Date();
+          const diffMs = now.getTime() - startTime.getTime();
+          
+          // Formatear como HH:MM:SS
+          const hours = Math.floor(diffMs / (1000 * 60 * 60));
+          const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+          const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+          
+          updatedTimes[child.id || ''] = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+      });
+      
+      setElapsedTimes(updatedTimes);
+    }, 1000);
+    
+    return () => clearInterval(intervalId);
+  }, [childrenPlaying]);
+
+  if (childrenPlaying.length === 0) {
+    return (
+      <div className="p-4 bg-gray-100 rounded text-center w-full">
+        <p>No hay niños jugando actualmente.</p>
+      </div>
+    );
+  }
+
   return (
-    <table className="border-collapse border border-gray-400 mt-4">
-      <thead>
-        <tr>
-          <th className="border border-gray-300 px-4 py-2">Child Name</th>
-          <th className="border border-gray-300 px-4 py-2">Parent Name</th>
-          <th className="border border-gray-300 px-4 py-2">Active Time</th>
-          <th className="border border-gray-300 px-4 py-2">Start Time</th>
-          <th className="border border-gray-300 px-4 py-2">Stop Time</th>
-        </tr>
-      </thead>
-      <tbody>
-        {childrenPlaying.map((child, index) => (
-          <tr key={index}>
-            <td className="border border-gray-300 px-4 py-2">
-              {child.child_name}
-            </td>
-            <td className="border border-gray-300 px-4 py-2">
-              {child.parent_name}
-            </td>
-            <td className="border border-gray-300 px-4 py-2">
-              {child.active_time}
-            </td>
-            <td className="border border-gray-300 px-4 py-2">
-              {child.start_time}
-            </td>
-            <td className="border border-gray-300 px-4 py-2">
-              <button
-                className="px-2 py rounded bg-red-200 text-red-500 font-bold cursor-pointer hover:bg-red-300 hover:shadow-md hover:shadow-red-300 duration-300"
-                onClick={() => {
-                  onStopTime(child);
-                }}
-              >
-                Stop Time
-              </button>
-            </td>
+    <div className="overflow-x-auto w-full">
+      <table className="min-w-full border-collapse border border-gray-300 bg-white rounded-lg shadow">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="border border-gray-300 px-4 py-2 text-left">Niño</th>
+            <th className="border border-gray-300 px-4 py-2 text-left">Padre/Madre</th>
+            <th className="border border-gray-300 px-4 py-2 text-center">Tiempo Activo</th>
+            <th className="border border-gray-300 px-4 py-2 text-center">Hora de Ingreso</th>
+            <th className="border border-gray-300 px-4 py-2 text-center">Acciones</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {childrenPlaying.map((child, index) => (
+            <tr key={child.id || index} className={index % 2 === 0 ? 'bg-gray-50' : ''}>
+              <td className="border border-gray-300 px-4 py-2 font-medium">
+                {child.child_name}
+              </td>
+              <td className="border border-gray-300 px-4 py-2">
+                {child.parent_name}
+              </td>
+              <td className="border border-gray-300 px-4 py-2 text-center font-mono">
+                {elapsedTimes[child.id || ''] || '00:00:00'}
+              </td>
+              <td className="border border-gray-300 px-4 py-2 text-center">
+                {new Date(child.start_time).toLocaleTimeString()}
+              </td>
+              <td className="border border-gray-300 px-4 py-2 text-center">
+                <button
+                  className="px-3 py-1 rounded bg-red-100 text-red-600 font-bold hover:bg-red-200 transition-colors"
+                  onClick={() => onStopTime(child)}
+                >
+                  Finalizar Tiempo
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 };
 
