@@ -5,6 +5,7 @@ import { ChildrenPlaying, ChildrenPlayingList } from "../types/childrenPlaying";
 import ChildrenPlayingTable from "../components/Admin/ChildrenPlayingTable";
 import Button from "../components/Button";
 import QRScanner from "../components/QRScanner";
+import Modal from "../components/Modal";
 
 export const Route = createFileRoute("/admin")({
   component: RouteComponent,
@@ -12,6 +13,8 @@ export const Route = createFileRoute("/admin")({
 
 function RouteComponent() {
   const [loggedIn, setLoggedIn] = useState(false);
+
+  const [qrScannerOpen, setQrScannerOpen] = useState(false);
 
   const [childrenPlaying, setChildrenPlaying] = useState<ChildrenPlayingList>(
     []
@@ -38,6 +41,23 @@ function RouteComponent() {
       start_time: "2023-10-01T10:00:00",
     },
   ];
+
+  const handleCodeScanned = (code: string) => {
+    const { nombre_padre, cc_padre, contacto, nombre_hijo, id_hijo } =
+      JSON.parse(code);
+
+    console.log("Parsed data:", {
+      nombre_padre,
+      cc_padre,
+      contacto,
+      nombre_hijo,
+      id_hijo,
+    });
+    // Aquí puedes manejar el código escaneado, por ejemplo, enviarlo a una API
+    // para registrar la entrada/salida del niño.
+
+    setQrScannerOpen(false);
+  };
 
   const onStopTime = (child: ChildrenPlaying) => {
     console.log("Time ended for child:", child);
@@ -70,14 +90,25 @@ function RouteComponent() {
       ) : (
         <>
           <h1 className="font-bold text-xl">Dashboard</h1>
-          <div className="overflow-x-auto w-full flex items-center justify-center">
+          <div className="overflow-x-auto w-full flex items-center md:justify-center">
             <ChildrenPlayingTable
               childrenPlaying={childrenPlaying}
               onStopTime={onStopTime}
             />
           </div>
-          <Button label="Recargar" onClick={getChildrenPlaying} />
-          {/* <QRScanner /> */}
+          <Button
+            label="Escanear código QR"
+            onClick={() => {
+              setQrScannerOpen(true);
+            }}
+          />
+          {qrScannerOpen && (
+            <Modal onClose={() => setQrScannerOpen(false)}>
+              <div className="md:w-120">
+                <QRScanner onCodeScanned={handleCodeScanned} />
+              </div>
+            </Modal>
+          )}
         </>
       )}
     </div>
