@@ -8,7 +8,7 @@ from app.api.deps import (CurrentUser, SessionDep, GetAdminUser, GetClientGroupF
                           GetClientFromPath, GetClientGroupFromQuery)
 from app.models import (
     Client, Plan, PlanInstance, PlanInstanceCreate, PlanInstancePublic,
-    Payment, Visit, ClientGroup, QRCode
+    Payment, Visit, ClientGroup, QRCode, QRCodeResponse
 )
 from app.services.epayco import generate_payment_url
 
@@ -436,4 +436,146 @@ async def make_payment(
         )
         result["payment_url"] = payment_url
     
-    return result 
+    return result
+
+@router.post("/qr-codes/generate", response_model=QRCodeResponse)
+async def generate_qr_code(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    body: dict
+) -> Any:
+    """
+    Generate a new QR code for a client.
+    The client's group will be determined automatically.
+    """
+    # Extract client_id from the request body
+    client_id = body.get("client_id")
+    
+    if not client_id:
+        raise HTTPException(status_code=422, detail="Missing client_id in request body")
+        
+    try:
+        client_id = uuid.UUID(client_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid client_id format")
+    
+    # Check if client exists and get its group_id
+    client = session.exec(select(Client).where(Client.id == client_id)).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    # Get the client's group
+    if not client.group_id:
+        raise HTTPException(status_code=400, detail="Client doesn't belong to any group")
+    
+    client_group_id = client.group_id
+    client_group = session.exec(select(ClientGroup).where(ClientGroup.id == client_group_id)).first()
+    if not client_group:
+        raise HTTPException(status_code=404, detail="Client group not found")
+    
+    # Check if the user has permission to generate QR code for this client group
+    user_client = session.exec(select(Client).where(Client.user_id == current_user.id)).first()
+    
+    # Allow if:
+    # 1. User is an admin, or
+    # 2. User is a client and is part of the client group, or
+    # 3. User is a client and is an admin of the client group
+    is_admin = current_user.is_superuser
+    is_part_of_group = user_client and user_client.group_id == client_group_id
+    
+    if not (is_admin or is_part_of_group):
+        raise HTTPException(status_code=403, detail="You don't have permission to generate QR codes for this client group")
+    
+    # Create new QR code
+    qr_code = QRCode(
+        client_id=client_id,
+        client_group_id=client_group_id
+    )
+    session.add(qr_code)
+    session.commit()
+    session.refresh(qr_code)
+    
+    # Load client relationship for the response
+    qr_code.client = client
+    
+    return qr_code
+
+@router.get("/qr-codes/active/{client_id}", response_model=QRCodeResponse)
+async def get_active_qr_code(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    client_id: uuid.UUID
+) -> Any:
+    """
+    Get the active QR code for a client.
+    Returns 404 if no active QR code is found.
+    """
+    # Find the client
+    client = session.exec(select(Client).where(Client.id == client_id)).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    # Check if user has permission to view this client's QR code
+    user_client = session.exec(select(Client).where(Client.user_id == current_user.id)).first()
+    
+    # Allow if:
+    # 1. User is an admin, or
+    # 2. User is a client and is part of the client group, or
+    # 3. User is a client and is an admin of the client group
+    is_admin = current_user.is_superuser
+    is_part_of_group = user_client and user_client.group_id == client.group_id
+    
+    if not (is_admin or is_part_of_group or current_user.admin_user):
+        raise HTTPException(status_code=403, detail="You don't have permission to view this client's QR code")
+    
+    # Find active QR code for this client
+    # An active QR code would be one that is in "pending" or "in_use" state
+    active_qr_code = session.exec(
+        select(QRCode)
+        .where(QRCode.client_id == client_id)
+        .where(QRCode.state.in_(["pending", "in_use"]))
+        .order_by(QRCode.created_at.desc())
+    ).first()
+    
+    if not active_qr_code:
+        # No active QR code found
+        raise HTTPException(status_code=404, detail="No active QR code found for this client")
+    
+    return active_qr_code
+
+@router.get("/qr-codes/{qr_code_id}", response_model=QRCodeResponse)
+async def get_qr_code(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    qr_code_id: uuid.UUID
+) -> Any:
+    """
+    Get a QR code by its ID.
+    """
+    # Use join to load the client relationship
+    qr_code = session.exec(
+        select(QRCode)
+        .where(QRCode.id == qr_code_id)
+    ).first()
+    
+    if not qr_code:
+        raise HTTPException(status_code=404, detail="QR code not found")
+    
+    # Check if user has permission to view this QR code
+    user_client = session.exec(select(Client).where(Client.user_id == current_user.id)).first()
+    
+    # Allow if:
+    # 1. User is an admin, or
+    # 2. User is a client and is part of the client group, or
+    # 3. User is a client and is an admin of the client group
+    is_admin = current_user.is_superuser
+    is_part_of_group = user_client and user_client.group_id == qr_code.client_group_id
+    #is_group_admin = user_client and qr_code.client_group_id in [group.id for group in getattr(user_client, "group_admin", [])]
+    
+    if not (is_admin or is_part_of_group or current_user.admin_user):
+        raise HTTPException(status_code=403, detail="You don't have permission to view this QR code")
+    
+    return qr_code 

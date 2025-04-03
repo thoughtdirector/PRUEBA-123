@@ -225,6 +225,7 @@ class ClientGroup(SQLModel, table=True):
         back_populates="group_admin",
       
     )
+    qr_codes: List["QRCode"] = Relationship(back_populates="client_group")
 
 
 
@@ -454,8 +455,8 @@ class VisitPublic(SQLModel):
     check_out: Optional[datetime] = None
     duration: Optional[float] = None  # in hours
     subscription_id: Optional[uuid.UUID] 
-
     notes: Optional[str]
+    payment: Optional["Payment"] = None
 
 
 class Visit(SQLModel, table=True):
@@ -467,12 +468,15 @@ class Visit(SQLModel, table=True):
     duration: Optional[float] = None  # in hours
     subscription_id: Optional[uuid.UUID] = Field(foreign_key="subscription.id")
     plan_instance_id: Optional[uuid.UUID] = Field(foreign_key="planinstance.id")
+    payment_id: Optional[uuid.UUID] = Field(foreign_key="payment.id", default=None)
     client: Client = Relationship(back_populates="visits")
     notes: Optional[str] = Field(default = None, max_length = 1024)
     details: Dict[str, Any] = Field(
         default_factory=dict, sa_column=Column(mutable_json_type(dbtype=JSONB, nested=True))
     )
     plan_instance: Optional["PlanInstance"] = Relationship(back_populates="visits")
+    qr_code: Optional["QRCode"] = Relationship(back_populates="visit")
+    payment: Optional["Payment"] = Relationship(back_populates="visit")
 
 class NotificationCreate(SQLModel):
     message: str
@@ -511,9 +515,11 @@ class Payment(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     plan_id: Optional[uuid.UUID] = Field(foreign_key="plan.id")
     plan_instance_id: Optional[uuid.UUID] = Field(foreign_key="planinstance.id")
+    
     purchased_addons: Dict = Field(default_factory=list, sa_column=Column(mutable_json_type(dbtype=JSONB, nested=True)))
     plan: Optional["Plan"] = Relationship(back_populates="payments")
     plan_instance: Optional["PlanInstance"] = Relationship(back_populates="payments")
+    visit: Optional["Visit"] = Relationship(back_populates="payment")
 
 class AdminUser(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -534,8 +540,24 @@ class AdminAction(SQLModel, table=True):
 
 class QRCode(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    client_id: uuid.UUID = Field(foreign_key="client.id")
-    client: "Client" = Relationship(back_populates="qr_codes")
+    client_id: Optional[uuid.UUID] = Field(foreign_key="client.id")
+    client_group_id: Optional[uuid.UUID] = Field(foreign_key="clientgroup.id")
+    visit_id: Optional[uuid.UUID] = Field(foreign_key="visit.id", default=None)
+    state: Optional[str] = Field(default="pending")  # "pending", "in_use", "used"
+    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    client: Optional["Client"] = Relationship(back_populates="qr_codes")
+    client_group: Optional["ClientGroup"] = Relationship(back_populates="qr_codes")
+    visit: Optional["Visit"] = Relationship(back_populates="qr_code")
+
+class QRCodeResponse(SQLModel):
+    id: uuid.UUID
+    client_id: Optional[uuid.UUID]
+    client_group_id: Optional[uuid.UUID]
+    visit_id: Optional[uuid.UUID]
+    state: str  # "pending", "in_use", "used"
+    created_at: Optional[datetime]
+    client: Optional[ClientPublic]
+    visit: Optional["VisitPublic"] = None  # Include visit information when available
 
 class PlanTokenCreate(SQLModel):
     plan_instance_id: uuid.UUID
@@ -600,3 +622,4 @@ class SuccessResponse(SQLModel):
     success: bool = True
     message: str
     data: Optional[Dict[str, Any]] = None
+

@@ -103,11 +103,16 @@ export type ValidationError = {
 export type ClientCreate = {
   identification: string;
   full_name: string;
-  email: string;
-  phone: string;
+  email?: string;
+  phone?: string;
   is_active?: boolean;
   is_child?: boolean;
   qr_code?: string | null;
   guardian_id?: string | null;
   children?: string[];
+  terms_accepted?: boolean;
+  details?: {
+    date_of_birth?: string;
+    [key: string]: any;
+  };
 }

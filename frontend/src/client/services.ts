@@ -1,6 +1,7 @@
 import type { CancelablePromise } from "./core/CancelablePromise";
 import { OpenAPI } from "./core/OpenAPI";
 import { request as __request } from "./core/request";
+import { api } from './api';
 
 import type {
   Body_login_login_access_token,
@@ -854,7 +855,6 @@ export class ClientService {
   public static getClientGroups(
     data: { skip: number; limit: number } = { skip: 0, limit: 100 }
   ) {
-
     const { skip = 0, limit = 100 } = data;
 
     return __request(OpenAPI, {
@@ -887,7 +887,6 @@ export class ClientService {
     });
   }
 
-
   public static getClientPlanInstances(
     data: { skip: number; limit: number; active_only: boolean } = {
       skip: 0,
@@ -895,7 +894,6 @@ export class ClientService {
       active_only: false,
     }
   ) {
-
     const { skip = 0, limit = 100, active_only = false } = data;
 
     return __request(OpenAPI, {
@@ -979,6 +977,121 @@ export class ClientService {
       },
       useOrg: true,
     });
+  }
+
+  // Method for making visit-related payments using admin endpoint
+  public static makeVisitPayment(data) {
+    return __request(OpenAPI, {
+      method: "POST",
+      url: "/api/v1/admin/force-payment",
+      body: data,
+      errors: {
+        401: `Unauthorized`,
+        403: `Forbidden`,
+        404: `Not Found`,
+        422: `Validation Error`,
+      },
+      useOrg: true,
+    });
+  }
+
+  // Add QR code methods to ClientService
+  public static generateQrCode(clientId) {
+    console.log("ClientService.generateQrCode called with clientId:", clientId);
+    // Make sure we're sending the parameters correctly
+    const body = {
+      client_id: clientId
+    };
+    console.log("Request body:", body);
+    
+    try {
+      return __request(OpenAPI, {
+        method: "POST",
+        url: "/api/v1/clients/plans/qr-codes/generate",
+        body: body,
+        errors: {
+          404: `Not Found`,
+          422: `Validation Error`,
+          403: `Forbidden`
+        },
+        useOrg: true
+      });
+    } catch (error) {
+      console.error("Error in generateQrCode service:", error);
+      throw error;
+    }
+  }
+
+  public static getQrCode(qrCodeId) {
+    return __request(OpenAPI, {
+      method: "GET",
+      url: `/api/v1/clients/plans/qr-codes/${qrCodeId}`,
+      errors: {
+        404: `Not Found`,
+        422: `Validation Error`
+      },
+      useOrg: true
+    });
+  }
+
+  public static getActiveQrCode(clientId) {
+    return __request(OpenAPI, {
+      method: "GET",
+      url: `/api/v1/clients/plans/qr-codes/active/${clientId}`,
+      errors: {
+        404: `Not Found`,
+        422: `Validation Error`
+      },
+      useOrg: true
+    });
+  }
+
+  public static checkInWithQr(qrCodeId) {
+    return __request(OpenAPI, {
+      method: "POST",
+      url: `/api/v1/admin/qr-codes/${qrCodeId}/check-in`,
+      errors: {
+        404: `Not Found`,
+        422: `Validation Error`
+      },
+      useOrg: true
+    });
+  }
+
+  public static checkOutWithQr(qrCodeId) {
+    return __request(OpenAPI, {
+      method: "POST",
+      url: `/api/v1/admin/qr-codes/${qrCodeId}/check-out`,
+      errors: {
+        404: `Not Found`,
+        422: `Validation Error`
+      },
+      useOrg: true
+    });
+  }
+
+  public static async debugGenerateQrCode(clientId) {
+    console.log("Debug: Generating QR code with clientId:", clientId);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/v1/clients/plans/qr-codes/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
+        body: JSON.stringify({
+          client_id: clientId
+        })
+      });
+      
+      const data = await response.json();
+      console.log("Debug: QR code response:", data);
+      return data;
+    } catch (error) {
+      console.error("Debug: QR code error:", error);
+      throw error;
+    }
   }
 }
 
@@ -1385,12 +1498,10 @@ export class DashboardService {
   }
 
   public static validateToken(data) {
-    const { token_value } = data;
-
     return __request(OpenAPI, {
       method: "POST",
       url: `/api/v1/admin/tokens/validate`,
-      body: { token_value },
+      body: { token_value: data.token_value },
       errors: {
         401: `Unauthorized`,
         403: `Forbidden`,
@@ -1413,6 +1524,14 @@ export class DashboardService {
       },
       useOrg: true,
     });
+  }
+
+  public static forceCreatePayment(data) {
+    return api.request({
+      method: 'POST',
+      url: '/api/v1/admin/force-payment',
+      data
+    }).then(response => response.data);
   }
 }
 

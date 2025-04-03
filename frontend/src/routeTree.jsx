@@ -44,6 +44,11 @@ import PlanInstanceDetail from './components/Client/PlanInstanceDetail'
 import PlanQRGenerator from './components/Client/PlanQRGenerator'
 import ChildRegister from './components/Client/ChildRegister'
 
+// Import the new temporary dashboard component
+import TempDashboard from './components/Temp/TempDashboard'
+
+import CheckInPage from './components/Temp/CheckInPage'
+
 // Root route
 
 const rootRoute =  createRootRoute({
@@ -144,6 +149,13 @@ const itemsRoute = createRoute({
   path: '/items',
   component: Items,
   validateSearch: (search) => itemsSearchSchema.parse(search),
+})
+
+// Temporary Dashboard Route
+const tempDashboardRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/temp-dashboard',
+  component: TempDashboard,
 })
 
 // Other routes
@@ -289,6 +301,13 @@ const childRegisterRoute = createRoute({
   component: ChildRegister,
 })
 
+// Add the new route for check-in page
+const checkInRoute = createRoute({
+  getParentRoute: () => activateOrgRoute,
+  path: '/check-in/$qrCodeId',
+  component: CheckInPage,
+})
+
 // Create the route tree
 const routeTree = rootRoute.addChildren([
   layoutRoute.addChildren([
@@ -314,6 +333,8 @@ const routeTree = rootRoute.addChildren([
       planInstanceDetailRoute,
       planQRGeneratorRoute,
       childRegisterRoute,
+      tempDashboardRoute,
+      checkInRoute,
     ]),
     settingsRoute,
 
