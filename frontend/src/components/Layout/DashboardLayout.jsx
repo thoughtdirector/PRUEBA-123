@@ -16,7 +16,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  Clipboard
+  Clipboard,
+  Zap
 } from 'lucide-react';
 import useAuth from '../../hooks/useAuth';
 import { useState } from 'react';
@@ -179,12 +180,12 @@ const DashboardLayout = () => {
             </button>
             <div className="md:hidden flex items-center">
               <h1 className="text-lg font-medium text-gray-900">
-                {isAdmin ? 'Admin Dashboard' : 'User Dashboard'}
+                {isAdmin ? 'Admin Dashboard' : 'Usuario'}
               </h1>
             </div>
             <div className="hidden md:block">
               <h1 className="text-lg font-medium text-gray-900">
-                {isAdmin ? 'Administrator Dashboard' : 'User Dashboard'}
+                {isAdmin ? 'Administrator Dashboard' : 'Usuario'}
               </h1>
             </div>
             <div className="flex items-center">

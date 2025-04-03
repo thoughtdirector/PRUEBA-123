@@ -12,7 +12,7 @@ from app.models import (
     Plan, Subscription, Payment, ClientPublic, PlanCreate, VisitPublic, QRCode, 
     SubscriptionCreate, ClientGroup, Reservation, ReservationPublic, ClientGroupPublic,
     SubscriptionPublic, PlanToken, PlanTokenCreate, PlanTokenUse, PlanTokenUseCreate,
-    PlanInstance, PlanInstanceCreate, PlanInstancePublic, PlanTokenPublic
+    PlanInstance, PlanInstanceCreate, PlanInstancePublic, PlanTokenPublic, AdminAction
 )
 import uuid
 from typing import Optional, List, Dict, Any
@@ -1002,4 +1002,210 @@ def get_all_reservations(
     statement = statement.offset(skip).limit(limit).order_by(Reservation.date)
     reservations = session.exec(statement).all()
     return reservations
+
+@router.post("/qr-codes/generate", response_model=QRCode)
+def generate_qr_code(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    body: dict
+) -> Any:
+    """
+    Generate a new QR code for a client in a client group.
+    """
+    # Extract client_id and client_group_id from the request body
+    client_id = body.get("client_id")
+    client_group_id = body.get("client_group_id")
+    
+    if not client_id or not client_group_id:
+        raise HTTPException(status_code=422, detail="Missing client_id or client_group_id in request body")
+        
+    try:
+        client_id = uuid.UUID(client_id)
+        client_group_id = uuid.UUID(client_group_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid client_id or client_group_id format")
+    
+    # Check if client exists and belongs to the client group
+    client = session.exec(select(Client).where(Client.id == client_id)).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    client_group = session.exec(select(ClientGroup).where(ClientGroup.id == client_group_id)).first()
+    if not client_group:
+        raise HTTPException(status_code=404, detail="Client group not found")
+    
+    if client.group_id != client_group_id:
+        raise HTTPException(status_code=400, detail="Client does not belong to this client group")
+    
+    # Check if the user has permission to generate QR code for this client group
+    user_client = session.exec(select(Client).where(Client.user_id == current_user.id)).first()
+    
+    # Allow if:
+    # 1. User is an admin, or
+    # 2. User is a client and is part of the client group, or
+    # 3. User is a client and is an admin of the client group
+    is_admin = current_user.is_superuser
+    is_part_of_group = user_client and user_client.group_id == client_group_id
+    is_group_admin = user_client and client_group.id in [admin_group.id for admin_group in getattr(user_client, "group_admin", [])]
+    
+    if not (is_admin or is_part_of_group or is_group_admin):
+        raise HTTPException(status_code=403, detail="You don't have permission to generate QR codes for this client group")
+    
+    # Create new QR code
+    qr_code = QRCode(
+        client_id=client_id,
+        client_group_id=client_group_id
+    )
+    session.add(qr_code)
+    session.commit()
+    session.refresh(qr_code)
+    
+    return qr_code
+
+@router.post("/qr-codes/{qr_code_id}/check-in", response_model=Visit)
+def check_in_with_qr(
+    *,
+    session: SessionDep,
+    current_user: GetAdminUser,
+    qr_code_id: uuid.UUID
+) -> Any:
+    """
+    Check in a client using their QR code.
+    """
+    qr_code = session.exec(select(QRCode).where(QRCode.id == qr_code_id)).first()
+    if not qr_code:
+        raise HTTPException(status_code=404, detail="QR code not found")
+    
+    if qr_code.state != "pending":
+        raise HTTPException(status_code=400, detail="QR code is not in a pending state")
+    
+    # Create new visit
+    visit = Visit(
+        client_id=qr_code.client_id,
+        plan_instance_id=None,  # You can add logic to find an active plan instance
+        details={"qr_code_id": str(qr_code_id)}
+    )
+    
+    # Update QR code
+    qr_code.state = "in_use"
+    qr_code.visit_id = visit.id
+    
+    session.add(visit)
+    session.add(qr_code)
+    session.commit()
+    session.refresh(visit)
+    
+    return visit
+
+@router.post("/qr-codes/{qr_code_id}/check-out", response_model=Visit)
+def check_out_with_qr(
+    *,
+    session: SessionDep,
+    current_user: GetAdminUser,
+    qr_code_id: uuid.UUID
+) -> Any:
+    """
+    Check out a client using their QR code.
+    """
+    qr_code = session.exec(select(QRCode).where(QRCode.id == qr_code_id)).first()
+    if not qr_code:
+        raise HTTPException(status_code=404, detail="QR code not found")
+    
+    if qr_code.state != "in_use":
+        raise HTTPException(status_code=400, detail="QR code is not in an active visit state")
+    
+    if not qr_code.visit_id:
+        raise HTTPException(status_code=400, detail="No active visit found for this QR code")
+    
+    visit = session.exec(select(Visit).where(Visit.id == qr_code.visit_id)).first()
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found")
+    
+    if visit.check_out:
+        raise HTTPException(status_code=400, detail="Client is already checked out")
+    
+    # Update visit with check-out time
+    visit.check_out = datetime.utcnow()
+    visit.checked_out_by = current_user.id
+    visit.duration = (visit.check_out - visit.check_in).total_seconds() / 3600  # Convert to hours
+    
+    # Mark QR code as used (completed state)
+    qr_code.state = "used"
+    
+    session.add(visit)
+    session.add(qr_code)
+    session.commit()
+    session.refresh(visit)
+    
+    return visit
+
 # Get client_groups
+
+@router.post("/force-payment", response_model=Payment)
+def force_create_payment(
+    *, 
+    session: SessionDep, 
+    current_user: GetAdminUser, 
+    payment_data: dict
+) -> Any:
+    """
+    Force create a payment without validation.
+    Useful for manual payments or fixing payment issues.
+    """
+    # Extract data from request
+    client_id = payment_data.get("client_id")
+    amount = payment_data.get("amount")
+    description = payment_data.get("description", "Manual payment")
+    payment_method = payment_data.get("payment_method", "cash")
+    visit_id = payment_data.get("visit_id")
+    
+    if not client_id or amount is None:
+        raise HTTPException(
+            status_code=422, 
+            detail="Missing required fields: client_id and amount are required"
+        )
+    
+    # Find client and client group
+    client = session.get(Client, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    client_group_id = client.group_id
+    if not client_group_id:
+        raise HTTPException(status_code=400, detail="Client must be part of a group")
+    
+    # Create payment record
+    payment = Payment(
+        client_group_id=client_group_id,
+        amount=float(amount),
+        status="completed",
+        payment_method=payment_method,
+        transaction_id=f"manual-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+        created_at=datetime.utcnow()
+    )
+    
+    # Associate with visit if provided
+    if visit_id:
+        visit = session.get(Visit, visit_id)
+        if visit:
+            visit.payment_id = payment.id
+           
+            session.add(visit)
+    session.add(payment)
+    
+    # Record admin action
+    admin_action = AdminAction(
+        admin_id=current_user.admin_user.id,
+        action_type="create",
+        entity_type="payment",
+        entity_id=payment.id,
+        description=f"Manually created payment of {amount} for client {client_id}: {description}"
+    )
+    
+    
+    session.add(admin_action)
+    session.commit()
+    session.refresh(payment)
+    
+    return payment

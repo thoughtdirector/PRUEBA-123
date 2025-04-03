@@ -69,7 +69,18 @@ const AdminDashboard = () => {
   // Format date for display
   const formatDate = (dateString) => {
     if (!dateString) return '';
-    const date = new Date(dateString);
+    
+    // Explicitly handle UTC date string
+    // If the string has a 'Z' at the end, it's already in UTC format
+    // Otherwise, we'll assume it's a UTC date without the Z indicator
+    const ensuredUTCString = dateString.endsWith('Z') 
+      ? dateString 
+      : `${dateString}Z`;
+    
+    // Create a date object from the UTC string
+    const date = new Date(ensuredUTCString);
+    
+    // Format in local timezone
     return date.toLocaleDateString('en-US', { 
       month: 'short', 
       day: 'numeric' 
@@ -79,7 +90,18 @@ const AdminDashboard = () => {
   // Format time for display
   const formatTime = (dateString) => {
     if (!dateString) return '';
-    const date = new Date(dateString);
+    
+    // Explicitly handle UTC time string
+    // If the string has a 'Z' at the end, it's already in UTC format
+    // Otherwise, we'll assume it's a UTC time without the Z indicator
+    const ensuredUTCString = dateString.endsWith('Z') 
+      ? dateString 
+      : `${dateString}Z`;
+    
+    // Create a date object from the UTC string
+    const date = new Date(ensuredUTCString);
+    
+    // Format in local timezone
     return date.toLocaleTimeString('en-US', { 
       hour: '2-digit', 
       minute: '2-digit' 
@@ -89,7 +111,16 @@ const AdminDashboard = () => {
   // Calculate time elapsed since check-in
   const getTimeElapsed = (checkInTime) => {
     if (!checkInTime) return '';
-    const checkIn = new Date(checkInTime);
+    
+    // Explicitly handle UTC time string
+    // If the string has a 'Z' at the end, it's already in UTC format
+    // Otherwise, we'll assume it's a UTC time without the Z indicator
+    const ensuredUTCString = checkInTime.endsWith('Z') 
+      ? checkInTime 
+      : `${checkInTime}Z`;
+    
+    // Create a date object from the UTC string
+    const checkIn = new Date(ensuredUTCString);
     const now = new Date();
     const diffMs = now - checkIn;
     const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));

@@ -2,7 +2,8 @@ import React from 'react';
 import { Navigate } from '@tanstack/react-router';
 import useAuth from '../../hooks/useAuth';
 import AdminDashboard from './dashboard';
-import UserDashboard from './userDashboard';
+// import UserDashboard from './userDashboard';
+import TempDashboard from '../../components/Temp/TempDashboard';
 
 const DashboardRouter = () => {
   const { user, isLoading, isAdmin } = useAuth();
@@ -20,8 +21,9 @@ const DashboardRouter = () => {
     return <AdminDashboard />;
   }
 
-  // Otherwise, show the user dashboard
-  return <UserDashboard />;
+  // Otherwise, show the temporary dashboard instead of user dashboard
+  // return <UserDashboard />;
+  return <TempDashboard />;
 };
 
 export default DashboardRouter; 
